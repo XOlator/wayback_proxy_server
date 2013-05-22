@@ -12,6 +12,7 @@ APP_ROOT = File.dirname(__FILE__)
 WAYBACK_PROXY_USER_AGENT = 'Wayback/0.1.0 <http://www.x-and-o.co/labs>'
 WAYBACK_PROXY_MAX_REDIRECTS = 5
 WAYBACK_PROXY_MAX_RETRIES = 5
+DEBUG = true
 
 Encoding.default_external = "UTF-8"
 Encoding.default_internal = "UTF-8"
