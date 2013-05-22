@@ -9,7 +9,9 @@
 
 
 APP_ROOT = File.dirname(__FILE__)
-WAYBACK_USER_AGENT = 'Wayback/0.1.0 <http://www.x-and-o.co/labs>'
+WAYBACK_PROXY_USER_AGENT = 'Wayback/0.1.0 <http://www.x-and-o.co/labs>'
+WAYBACK_PROXY_MAX_REDIRECTS = 5
+WAYBACK_PROXY_MAX_RETRIES = 5
 
 Encoding.default_external = "UTF-8"
 Encoding.default_internal = "UTF-8"
@@ -24,6 +26,11 @@ requires.each{|r| require r}
 
 class Array
   def extract_options!; last.is_a?(::Hash) ? pop : {}; end unless defined? Array.new.extract_options!
+end
+
+# Use our User-agent
+Wayback.configure do |c|
+  c.connection_options[:headers][:user_agent] = WAYBACK_PROXY_USER_AGENT
 end
 
 
