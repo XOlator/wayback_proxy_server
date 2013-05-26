@@ -44,19 +44,22 @@ end
 
 
 # Cache setup
-# $wayback_cache = Diskcached.new(File.join(APP_ROOT, 'cache'))
-# $wayback_cache.flush if DEBUG # ensure caches are empty on startup
-$wayback_cache = Redis.new(:db => options[:cache_db])
-$wayback_cache.flushdb if DEBUG # flush db on start
+begin
+  # $wayback_cache = Diskcached.new(File.join(APP_ROOT, 'cache'))
+  # $wayback_cache.flush if DEBUG # ensure caches are empty on startup
+  $wayback_cache = Redis.new(:db => options[:cache_db])
+  $wayback_cache.flushdb if DEBUG # flush db on start
+rescue
+  nil
+end
 
-
-# --- BEGIN ---
-
-# Use our User-agent
+# Use our User-agent (Wayback config)
 Wayback.configure do |c|
   c.connection_options[:headers][:user_agent] = WAYBACK_PROXY_USER_AGENT
 end
 
 
-server = WaybackProxyServer.new(:host => 'localhost', :port => 8888, :cache => $wayback_cache)
+# --- BEGIN ---
+
+server = WaybackProxyServer.new(:host => options[:host], :port => options[:port], :cache => $wayback_cache)
 server.run
