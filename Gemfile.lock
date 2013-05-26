@@ -6,6 +6,7 @@ GEM
     faraday_middleware (0.9.0)
       faraday (>= 0.7.4, < 0.9)
     multipart-post (1.2.0)
+    redis (3.0.4)
     wayback (0.1.0)
       faraday (~> 0.8, < 0.10)
       faraday_middleware (~> 0.9, < 0.10)
@@ -14,4 +15,5 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  redis (= 3.0.4)
   wayback (= 0.1.0)

@@ -11,11 +11,36 @@ class WaybackProxyServer
 
   def initialize(*args)
     @opts = args.extract_options!
+    @cache = @opts[:cache]
     @threads = []
+
+    puts "Starting Wayback Server on #{host}:#{port}..."
   end
 
   def server
     @server ||= TCPServer.new(host, port)
+  end
+
+  # Wrapper for cache, if configured
+  def cache(key)
+    if @cache
+      begin
+        sha_key = Digest::SHA1.hexdigest(key)
+        result = @cache.get(sha_key) rescue nil
+        unless result
+          result = Proc.new{ yield }.call
+          @cache.set(sha_key, result)
+        end
+        result
+      rescue => err
+        puts "Caching Error: #{key} :: #{err}"
+        result = Proc.new{ yield }.call
+      end
+    else
+      result = Proc.new{ yield }.call
+    end
+
+    result
   end
 
   # Core server compontent that includes loop with Thread requests.
@@ -33,7 +58,6 @@ class WaybackProxyServer
 
           # Get the method and URL from the request string
           http_request = request.lines.first # first line
-          puts http_request
           Thread.current[:request_method] = http_request.gsub(/^([A-Z]+)(.*)$/i, '\1').downcase.to_sym rescue nil
           uri = URI.parse(http_request.gsub(/^([A-Z]+)/, '').gsub(/(\sHTTP.*)/, ''))
 
@@ -103,10 +127,11 @@ class WaybackProxyServer
 
     # GET request
     begin
-      puts uri
-      req = Net::HTTP::Get.new(uri.path, default_opts.merge({}))
-      resp = Net::HTTP.start(uri.host, uri.port){|http| http.request(req)}
-      parse_response(resp)
+      cache("get:#{uri}") do
+        req = Net::HTTP::Get.new(uri.path, default_opts.merge({}))
+        resp = Net::HTTP.start(uri.host, uri.port){|http| http.request(req)}
+        parse_response(resp)
+      end
     rescue => err
       handle_error(__method__, err)
       http_failure
@@ -178,23 +203,24 @@ class WaybackProxyServer
 
   # Get the URI for the Wayback page, if available
   def get_wayback_uri(uri,t=:first_date)
-    begin
-      list = get_wayback_list(uri)
-      if list[:dates].length > 0
-        d = list[t] if [:first_date,:last_date].include?(t)
-        d ||= list[:first_date] # default to first date
-        URI.parse(list[:dates][d][:uri])
-      else
+    cache("wayback:#{uri}") do
+      begin
+        list = get_wayback_list(uri)
+        if list[:dates].length > 0
+          d = list[t] if [:first_date,:last_date].include?(t)
+          d ||= list[:first_date] # default to first date
+          URI.parse(list[:dates][d][:uri])
+        else
+          uri
+        end
+      rescue
         uri
       end
-    rescue
-      uri
     end
   end
 
   # Get the list of available archived pages
   def get_wayback_list(uri)
-    # TODO: Nice place to add caching (HINT HINT REDIS)
     Wayback.list(uri)
   end
 
