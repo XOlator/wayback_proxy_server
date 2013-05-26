@@ -12,7 +12,6 @@ APP_ROOT = File.dirname(__FILE__)
 WAYBACK_PROXY_USER_AGENT = 'Wayback/0.1.0 <http://www.x-and-o.co/labs>'
 WAYBACK_PROXY_MAX_REDIRECTS = 5
 WAYBACK_PROXY_MAX_RETRIES = 5
-DEBUG = true
 
 Encoding.default_external = "UTF-8"
 Encoding.default_internal = "UTF-8"
@@ -32,7 +31,10 @@ OptionParser.new do |opts|
   opts.on("-h H", "--host H", String, "Host IP/domain") {|v| options[:host] = v}
   opts.on("-p P", "--port P", Integer, "Port") {|v| options[:port] = v}
   opts.on("-c DB", "--cache-db DB", Integer, "Cache Database") {|v| options[:cache_db] = v}
+  opts.on("--debug", "Debug Mode") {|v| DEBUG = true}
 end.parse!
+DEBUG ||= false
+
 
 raise "Host IP/domain required" if options[:host].nil? || options[:host] == ''
 

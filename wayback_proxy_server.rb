@@ -14,7 +14,7 @@ class WaybackProxyServer
     @cache = @opts[:cache]
     @threads = []
 
-    puts "Starting Wayback Server on #{host}:#{port}..."
+    puts "Starting Wayback Server on #{host}:#{port}..." if DEBUG
   end
 
   def server
