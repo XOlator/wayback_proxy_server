@@ -32,6 +32,7 @@ OptionParser.new do |opts|
   opts.on("-p P", "--port P", Integer, "Port") {|v| options[:port] = v}
   opts.on("-c DB", "--cache-db DB", Integer, "Cache Database") {|v| options[:cache_db] = v}
   opts.on("--debug", "Debug Mode") {|v| DEBUG = true}
+  opts.on("-d", "--daemon", "Daemon Mode") {|v| options[:daemon] = true}
 end.parse!
 DEBUG ||= false
 
@@ -63,5 +64,27 @@ end
 
 # --- BEGIN ---
 
-server = WaybackProxyServer.new(:host => options[:host], :port => options[:port], :cache => $wayback_cache)
-server.run
+result = Proc.new{|opts, cache|
+   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :cache => $wayback_cache)
+   server.run
+}
+
+begin
+  if options[:daemon]
+    puts "Forking process..."
+    p = fork { result.call(options) }
+    sleep 2
+    s = Process.getpgid(p) rescue nil
+    if s
+      Process.detach(p)
+      File.open('./proxy.pid', "w") {|f| f.write p}
+      puts "   running as #{p}."
+    else
+      puts "   did not start"
+    end
+  else
+    result.call(options)
+  end
+rescue => err
+  puts "ERROR: #{err}"
+end
