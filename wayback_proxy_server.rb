@@ -2,6 +2,11 @@
 
 class WaybackProxyServer
 
+  CR   = "\x0d"
+  LF   = "\x0a"
+  CRLF = "\x0d\x0a"
+
+
   # TODO: ...
   #   - SSL support
   #   - POST requests
@@ -18,7 +23,28 @@ class WaybackProxyServer
   end
 
   def server
-    @server ||= TCPServer.new(host, port)
+    return @server unless @server.nil?
+
+    @server = TCPServer.new(host, port)
+    begin
+      if ssl_configured?
+        # context = OpenSSL::SSL::SSLContext.new
+        # context.verify_mode = OpenSSL::SSL::VERIFY_NONE
+        # context.cert = OpenSSL::X509::Certificate.new( File.read(@opts[:ssl][:cert]) )
+        # context.key = OpenSSL::PKey::RSA.new( File.read(@opts[:ssl][:key]) )
+        # @sslserver = OpenSSL::SSL::SSLServer.new(@server, context)
+        # # @sslserver.start_immediately = true
+        # @server = @sslserver
+        # puts "...using OpenSSL" if DEBUG
+      end
+    rescue => err
+      puts "OpenSSL Error: #{err}"
+    end
+    @server
+  end
+
+  def ssl_configured?
+    false # File.exists?(@opts[:ssl][:cert]) and File.exists?(@opts[:ssl][:key])
   end
 
   # Wrapper for cache, if configured
@@ -47,30 +73,35 @@ class WaybackProxyServer
   def run
     loop do
       Thread.start(server.accept) do |session|
+        Thread.current[:session] = session
+
         begin
           request, resp = '', nil
           Thread.current[:redirect_count] = 0
 
-          while (r = session.gets)
+          while (r = Thread.current[:session].gets)
             break if r =~ /^\s*$/
             request << r.chomp
           end
 
+          Thread.current[:request] = request
+
           # Get the method and URL from the request string
           http_request = request.lines.first # first line
           Thread.current[:request_method] = http_request.gsub(/^([A-Z]+)(.*)$/i, '\1').downcase.to_sym rescue nil
-          uri = URI.parse(http_request.gsub(/^([A-Z]+)/, '').gsub(/(\sHTTP.*)/, ''))
 
-        rescue
+          uri = URI.parse(http_request.gsub(/^([A-Z]+)/, '').gsub(/(\sHTTP.*)/, '')) rescue nil
+
+        rescue => err
           handle_error(__method__, err)
-          session.write(http_failure)
-          session.close
+          Thread.current[:session].write(http_failure)
+          Thread.current[:session].close
           Thread.current.exit
         end
 
         begin
           resp = fetch(uri)
-          session.write(resp)
+          Thread.current[:session].write(resp)
 
         rescue Errno::EPIPE, Errno::ECONNRESET => err
           unless count > max_retries
@@ -78,15 +109,15 @@ class WaybackProxyServer
             retry
           else
             handle_error(__method__, err)
-            session.write(http_failure)
+            Thread.current[:session].write(http_failure)
           end
 
         rescue => err
           handle_error(__method__, err)
-          session.write(http_failure)
+          Thread.current[:session].write(http_failure)
         end
 
-        session.close rescue nil
+        Thread.current[:session].close rescue nil
         Thread.current.exit
       end
     end
@@ -94,7 +125,10 @@ class WaybackProxyServer
 
   # Method to fetch a URI, determine method for request, and handle certain errors.
   def fetch(uri)
+    return http_bad_request if uri.nil?
     return http_too_many_redirects if Thread.current[:redirect_count] > max_redirects
+
+    puts "Fetch: #{Thread.current[:request_method]}: #{uri}" if DEBUG
 
     case Thread.current[:request_method]
       when :get
@@ -109,6 +143,10 @@ class WaybackProxyServer
         delete_request(uri)
       when :connect
         connect_request(uri)
+      when :options
+        options_request(uri)
+      when :trace
+        trace_request(uri)
       else
         http_not_implemented
     end rescue nil
@@ -140,26 +178,74 @@ class WaybackProxyServer
 
   # Handle POST requests
   def post_request
+    puts "POST not implemented: #{uri}" if DEBUG
     http_not_implemented
   end
 
   # Handle HEAD requests
   def head_request
+    puts "HEAD not implemented: #{uri}" if DEBUG
     http_not_implemented
   end
 
   # Handle PUT requests
   def put_request
+    puts "PUT not implemented: #{uri}" if DEBUG
     http_not_implemented
   end
 
   # Handle DELETE requests
   def delete_request
+    puts "DELETE not implemented: #{uri}" if DEBUG
     http_not_implemented
   end
 
   # Handle CONNECT requests
-  def connect_request
+  def connect_request(uri)
+    begin
+     reqhost, reqport = uri.to_s.split(":", 2)
+
+      begin
+        os = TCPSocket.new(reqhost, reqport)
+        Thread.current[:session].write(http_success)
+      rescue => err
+        puts ("CONNECT #{reqhost}:#{reqport}: failed `#{err.message}'")
+        Thread.current[:session].write(http_bad_gateway)
+      ensure
+        Thread.current[:session].write("\r\n") # Flush headers
+      end
+
+      begin
+        while fds = IO::select([Thread.current[:session], os])
+          if fds[0].member?(Thread.current[:session])
+            buf = Thread.current[:session].sysread(1024)
+            os.syswrite(buf)
+          elsif fds[0].member?(os)
+            buf = os.sysread(1024);
+            Thread.current[:session].syswrite(buf)
+          end
+        end
+      rescue => err
+        handle_error(__method__, err)
+      ensure
+        os.close
+      end
+
+    rescue => err
+      handle_error(__method__, err)
+      nil
+    end
+  end
+
+  # Handle OPTIONS requests
+  def options_request(uri)
+    puts "OPTIONS not implemented: #{uri}" if DEBUG
+    http_not_implemented
+  end
+
+  # Handle TRACE requests
+  def trace_request(uri)
+    puts "TRACE not implemented: #{uri}" if DEBUG
     http_not_implemented
   end
 
@@ -225,9 +311,9 @@ class WaybackProxyServer
   end
 
   # Echo out error information and backtrace.
-  def handle_error(m,e)
-    puts "Error: #{e} in #{m || 'unknown'}" # if DEBUG
-    e.backtrace.map{|l| puts "   #{l}"} if DEBUG
+  def handle_error(m,err)
+    puts "Error: #{err} in #{m || 'unknown'}" # if DEBUG
+    err.backtrace.map{|l| puts "   #{l}"} if DEBUG
   end
 
   # Default options
@@ -239,8 +325,10 @@ class WaybackProxyServer
 
   # HTTP status messages
   def http_success; "HTTP/1.1 200 OK\r\n"; end
+  def http_bad_request; "HTTP/1.1 400 Bad Request\r\n"; end
   def http_failure; "HTTP/1.1 404 Not Found\r\n"; end
   def http_not_implemented; "HTTP/1.1 501 Not Implemented\r\n"; end
+  def http_bad_gateway; "HTTP/1.1 503 Bad Gateway\r\n"; end
   def http_too_many_redirects; "HTTP/1.1 504 Gateway Timeout\r\n"; end
 
 end

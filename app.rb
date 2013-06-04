@@ -9,9 +9,6 @@
 
 
 APP_ROOT = File.dirname(__FILE__)
-WAYBACK_PROXY_USER_AGENT = 'Wayback/0.1.0 <http://www.x-and-o.co/labs>'
-WAYBACK_PROXY_MAX_REDIRECTS = 5
-WAYBACK_PROXY_MAX_RETRIES = 5
 
 Encoding.default_external = "UTF-8"
 Encoding.default_internal = "UTF-8"
@@ -20,12 +17,16 @@ require "rubygems"
 require "bundler"
 Bundler.setup
 
-requires = ['optparse', 'socket', 'net/http', 'uri', 'wayback', 'redis', File.expand_path(APP_ROOT, 'wayback_proxy_server.rb')]
+requires = ['openssl', 'optparse', 'socket', 'net/http', 'uri', 'wayback', 'redis', File.expand_path(APP_ROOT, 'wayback_proxy_server.rb'), File.expand_path(APP_ROOT, 'version.rb')]
 requires.each{|r| require r}
 
+WAYBACK_PROXY_USER_AGENT = "Wayback/#{WaybackProxyServerVersion.to_s} <http://www.x-and-o.co/labs>"
+WAYBACK_PROXY_MAX_REDIRECTS = 5
+WAYBACK_PROXY_MAX_RETRIES = 5
 
 # Ensure the proper options are set on start
 options = {:port => 8888, :cache_db => 1}
+
 OptionParser.new do |opts|
   opts.banner = "Usage: app.rb [options]"
   opts.on("-h H", "--host H", String, "Host IP/domain") {|v| options[:host] = v}
@@ -33,11 +34,19 @@ OptionParser.new do |opts|
   opts.on("-c DB", "--cache-db DB", Integer, "Cache Database") {|v| options[:cache_db] = v}
   opts.on("--debug", "Debug Mode") {|v| DEBUG = true}
   opts.on("-d", "--daemon", "Daemon Mode") {|v| options[:daemon] = true}
+  opts.on("-s", "--ssl", "Allow SSL") {|v| options[:ssl] = {}}
 end.parse!
 DEBUG ||= false
 
 
 raise "Host IP/domain required" if options[:host].nil? || options[:host] == ''
+
+
+# SSL Certificate
+if options[:ssl]
+  options[:ssl][:key] = File.join(APP_ROOT, '.ssl', 'server.key')# if File.exists?(File.expand_path(APP_ROOT, '.ssl/wayback.key'))
+  options[:ssl][:cert] = File.join(APP_ROOT, '.ssl', 'server.pem')# if File.exists?(File.expand_path(APP_ROOT, '.ssl/wayback.crt'))
+end
 
 
 # Hack for array extract_options! stype
@@ -65,7 +74,7 @@ end
 # --- BEGIN ---
 
 result = Proc.new{|opts, cache|
-   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :cache => $wayback_cache)
+   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :ssl => opts[:ssl], :cache => $wayback_cache)
    server.run
 }
 
@@ -87,4 +96,5 @@ begin
   end
 rescue => err
   puts "ERROR: #{err}"
+  err.backtrace.map{|l| puts "   #{l}"} if DEBUG
 end

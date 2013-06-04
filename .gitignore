@@ -1,4 +1,6 @@
 .DS_Store
 ._*
 *.log
-cache/
+cache
+.ssl
+proxy.pid
