@@ -47,6 +47,10 @@ class WaybackProxyServer
     false # File.exists?(@opts[:ssl][:cert]) and File.exists?(@opts[:ssl][:key])
   end
 
+  def whitelist
+    @whitelist ||= File.readlines(File.join(APP_ROOT, 'whitelist.txt')).to_a.map{|v| v.match(/^(\r)?\n$/) ? nil : v.gsub(/(\r)?\n/m, '')}.compact rescue []
+  end
+
   # Wrapper for cache, if configured
   def cache(key)
     if @cache
@@ -299,13 +303,17 @@ class WaybackProxyServer
   def get_wayback_uri(uri,t=:first_date)
     cache("wayback:#{uri}:#{t}") do
       begin
-        list = Wayback.list(uri)
-        if list[:dates].length > 0
-          d = list[t] if [:first_date,:last_date].include?(t)
-          d ||= list[:first_date] # default to first date
-          URI.parse(list[:dates][d][:uri])
-        else
+        if whitelisted?(uri)
           uri
+        else
+          list = Wayback.list(uri)
+          if list[:dates].length > 0
+            d = list[t] if [:first_date,:last_date].include?(t)
+            d ||= list[:first_date] # default to first date
+            URI.parse(list[:dates][d][:uri])
+          else
+            uri
+          end
         end
       rescue => err
         uri
@@ -317,6 +325,11 @@ class WaybackProxyServer
   def handle_error(m,err)
     puts "Error: #{err} in #{m || 'unknown'}" # if DEBUG
     err.backtrace.map{|l| puts "   #{l}"} if DEBUG
+  end
+
+  def whitelisted?(uri)
+    whitelist.each{|v| return true if uri.to_s.match(Regexp.new(Regexp.escape(v), true))}
+    return false
   end
 
   # Default options
