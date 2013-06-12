@@ -8,5 +8,4 @@ source 'https://rubygems.org'
 
 
 gem 'wayback',            '0.1.0'
-# gem 'diskcached',         '1.1.0'
 gem 'redis',              '3.0.4'

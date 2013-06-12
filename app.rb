@@ -74,7 +74,7 @@ end
 # --- BEGIN ---
 
 result = Proc.new{|opts, cache|
-   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :ssl => opts[:ssl], :cache => $wayback_cache)
+   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :ssl => opts[:ssl], :allow_ssl => true, :cache => $wayback_cache)
    server.run
 }
 

@@ -158,6 +158,7 @@ class WaybackProxyServer
     begin
       if !uri.host.match(/archive\.org$/i) && determine_page_type(uri) == :unknown
         uri = get_wayback_uri(uri, :first_date)
+        puts uri
       end
     rescue => err
       handle_error(__method__, err)
@@ -202,38 +203,46 @@ class WaybackProxyServer
 
   # Handle CONNECT requests
   def connect_request(uri)
-    begin
-     reqhost, reqport = uri.to_s.split(":", 2)
-
+    if @opts[:allow_ssl]
       begin
-        os = TCPSocket.new(reqhost, reqport)
-        Thread.current[:session].write(http_success)
-      rescue => err
-        puts ("CONNECT #{reqhost}:#{reqport}: failed `#{err.message}'")
-        Thread.current[:session].write(http_bad_gateway)
-      ensure
-        Thread.current[:session].write("\r\n") # Flush headers
-      end
+       reqhost, reqport = uri.to_s.split(":", 2)
 
-      begin
-        while fds = IO::select([Thread.current[:session], os])
-          if fds[0].member?(Thread.current[:session])
-            buf = Thread.current[:session].sysread(1024)
-            os.syswrite(buf)
-          elsif fds[0].member?(os)
-            buf = os.sysread(1024);
-            Thread.current[:session].syswrite(buf)
-          end
+        begin
+          os = TCPSocket.new(reqhost, reqport)
+          Thread.current[:session].write(http_success)
+        rescue => err
+          puts ("CONNECT #{reqhost}:#{reqport}: failed `#{err.message}'")
+          Thread.current[:session].write(http_bad_gateway)
+        ensure
+          Thread.current[:session].write("\r\n") # Flush headers
         end
+
+        begin
+          Timeout::timeout(5) {
+            while fds = IO::select([Thread.current[:session], os],nil,nil,5000)
+              if fds[0].member?(Thread.current[:session])
+                buf = Thread.current[:session].sysread(1024)
+                os.syswrite(buf)
+              elsif fds[0].member?(os)
+                buf = os.sysread(1024)
+                Thread.current[:session].syswrite(buf)
+              end
+            end
+          }
+        rescue Timeout::Error
+          nil
+        rescue => err
+          handle_error(__method__, err)
+        ensure
+          os.close
+        end
+
       rescue => err
         handle_error(__method__, err)
-      ensure
-        os.close
+        nil
       end
-
-    rescue => err
-      handle_error(__method__, err)
-      nil
+    else
+      http_not_implemented
     end
   end
 
@@ -289,7 +298,7 @@ class WaybackProxyServer
 
   # Get the URI for the Wayback page, if available
   def get_wayback_uri(uri,t=:first_date)
-    cache("wayback:#{uri}") do
+    cache("wayback:#{uri}:#{t}") do
       begin
         list = get_wayback_list(uri)
         if list[:dates].length > 0
@@ -299,7 +308,7 @@ class WaybackProxyServer
         else
           uri
         end
-      rescue
+      rescue => err
         uri
       end
     end
