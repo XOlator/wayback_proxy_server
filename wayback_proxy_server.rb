@@ -78,6 +78,8 @@ class WaybackProxyServer
     loop do
       Thread.start(server.accept) do |session|
         Thread.current[:session] = session
+        fam, port, *addr = session.getpeername.unpack('nnC4')
+        Thread.current[:request_ip] = addr.join('.')
 
         begin
           request, resp = '', nil
@@ -132,7 +134,7 @@ class WaybackProxyServer
     return http_error(:bad_request) if uri.nil?
     return http_error(:too_many_redirects) if Thread.current[:redirect_count] > max_redirects
 
-    puts "Fetch: #{Thread.current[:request_method]}: #{uri}" if DEBUG
+    puts "Fetch #{Thread.current[:request_ip]}: #{Thread.current[:request_method]}: #{uri}" if DEBUG
 
     case Thread.current[:request_method]
       when :get
