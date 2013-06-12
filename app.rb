@@ -17,7 +17,7 @@ require "rubygems"
 require "bundler"
 Bundler.setup
 
-requires = ['openssl', 'optparse', 'socket', 'net/http', 'uri', 'wayback', 'redis', File.expand_path(APP_ROOT, 'wayback_proxy_server.rb'), File.expand_path(APP_ROOT, 'version.rb')]
+requires = ['openssl', 'optparse', 'socket', 'net/http', 'uri', 'wayback', 'redis', File.join(APP_ROOT, 'wayback_proxy_server.rb'), File.join(APP_ROOT, 'version.rb')]
 requires.each{|r| require r}
 
 WAYBACK_PROXY_USER_AGENT = "Wayback/#{WaybackProxyServerVersion.to_s} <http://www.x-and-o.co/labs>"

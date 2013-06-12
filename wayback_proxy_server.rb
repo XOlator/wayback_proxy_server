@@ -94,7 +94,7 @@ class WaybackProxyServer
 
         rescue => err
           handle_error(__method__, err)
-          Thread.current[:session].write(http_failure)
+          Thread.current[:session].write(http_error(:failure))
           Thread.current[:session].close
           Thread.current.exit
         end
@@ -109,12 +109,12 @@ class WaybackProxyServer
             retry
           else
             handle_error(__method__, err)
-            Thread.current[:session].write(http_failure)
+            Thread.current[:session].write(http_error(:failure))
           end
 
         rescue => err
           handle_error(__method__, err)
-          Thread.current[:session].write(http_failure)
+          Thread.current[:session].write(http_error(:failure))
         end
 
         Thread.current[:session].close rescue nil
@@ -125,8 +125,8 @@ class WaybackProxyServer
 
   # Method to fetch a URI, determine method for request, and handle certain errors.
   def fetch(uri)
-    return http_bad_request if uri.nil?
-    return http_too_many_redirects if Thread.current[:redirect_count] > max_redirects
+    return http_error(:bad_request) if uri.nil?
+    return http_error(:too_many_redirects) if Thread.current[:redirect_count] > max_redirects
 
     puts "Fetch: #{Thread.current[:request_method]}: #{uri}" if DEBUG
 
@@ -148,7 +148,7 @@ class WaybackProxyServer
       when :trace
         trace_request(uri)
       else
-        http_not_implemented
+        http_error(:not_implemented)
     end rescue nil
   end
 
@@ -158,7 +158,6 @@ class WaybackProxyServer
     begin
       if !uri.host.match(/archive\.org$/i) && determine_page_type(uri) == :unknown
         uri = get_wayback_uri(uri, :first_date)
-        puts uri
       end
     rescue => err
       handle_error(__method__, err)
@@ -173,32 +172,32 @@ class WaybackProxyServer
       end
     rescue => err
       handle_error(__method__, err)
-      http_failure
+      http_error(:failure)
     end
   end
 
   # Handle POST requests
   def post_request
     puts "POST not implemented: #{uri}" if DEBUG
-    http_not_implemented
+    http_error(:not_implemented)
   end
 
   # Handle HEAD requests
   def head_request
     puts "HEAD not implemented: #{uri}" if DEBUG
-    http_not_implemented
+    http_error(:not_implemented)
   end
 
   # Handle PUT requests
   def put_request
     puts "PUT not implemented: #{uri}" if DEBUG
-    http_not_implemented
+    http_error(:not_implemented)
   end
 
   # Handle DELETE requests
   def delete_request
     puts "DELETE not implemented: #{uri}" if DEBUG
-    http_not_implemented
+    http_error(:not_implemented)
   end
 
   # Handle CONNECT requests
@@ -212,7 +211,7 @@ class WaybackProxyServer
           Thread.current[:session].write(http_success)
         rescue => err
           puts ("CONNECT #{reqhost}:#{reqport}: failed `#{err.message}'")
-          Thread.current[:session].write(http_bad_gateway)
+          Thread.current[:session].write(http_error(:bad_gateway))
         ensure
           Thread.current[:session].write("\r\n") # Flush headers
         end
@@ -242,20 +241,20 @@ class WaybackProxyServer
         nil
       end
     else
-      http_not_implemented
+      http_error(:failure)
     end
   end
 
   # Handle OPTIONS requests
   def options_request(uri)
     puts "OPTIONS not implemented: #{uri}" if DEBUG
-    http_not_implemented
+    http_error(:not_implemented)
   end
 
   # Handle TRACE requests
   def trace_request(uri)
     puts "TRACE not implemented: #{uri}" if DEBUG
-    http_not_implemented
+    http_error(:not_implemented)
   end
 
 
@@ -282,7 +281,7 @@ class WaybackProxyServer
         fetch(new_uri)
 
       else
-        http_failure
+        http_error(:failure)
     end
   end
 
@@ -300,7 +299,7 @@ class WaybackProxyServer
   def get_wayback_uri(uri,t=:first_date)
     cache("wayback:#{uri}:#{t}") do
       begin
-        list = get_wayback_list(uri)
+        list = Wayback.list(uri)
         if list[:dates].length > 0
           d = list[t] if [:first_date,:last_date].include?(t)
           d ||= list[:first_date] # default to first date
@@ -312,11 +311,6 @@ class WaybackProxyServer
         uri
       end
     end
-  end
-
-  # Get the list of available archived pages
-  def get_wayback_list(uri)
-    Wayback.list(uri)
   end
 
   # Echo out error information and backtrace.
@@ -339,5 +333,13 @@ class WaybackProxyServer
   def http_not_implemented; "HTTP/1.1 501 Not Implemented\r\n"; end
   def http_bad_gateway; "HTTP/1.1 503 Bad Gateway\r\n"; end
   def http_too_many_redirects; "HTTP/1.1 504 Gateway Timeout\r\n"; end
+
+  def http_error(s)
+    str = send("http_#{s}")
+    i = str.gsub(/^(.*)(\d{3})(.*)$/m, '\2')
+    str << "\r\n"
+    str << File.read(File.join(APP_ROOT,"pages/#{i.to_s}.html")) rescue ':('
+    str
+  end
 
 end
