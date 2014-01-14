@@ -23,9 +23,9 @@ openssl x509 -req -days 365 -in .ssl/wayback.csr -out .ssl/wayback.crt -signkey 
 
 ## License
 
-(C) 2013 [X&O][x-o]. http://www.x-and-o.co
+(C) 2013-2014 [X&O][x-o]. http://www.xolator.com
 
 Read the [LICENSE.md][license] for more information
 
-[x-o]: http://www.x-and-o.co
+[x-o]: http://www.xolator.com
 [license]: LICENSE.md

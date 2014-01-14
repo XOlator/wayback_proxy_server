@@ -18,6 +18,7 @@ class WaybackProxyServer
     @opts = args.extract_options!
     @cache = @opts[:cache]
     @threads = []
+    @logger = @opts[:logger]
 
     puts "Starting Wayback Server on #{host}:#{port}..." if DEBUG
   end
@@ -46,6 +47,11 @@ class WaybackProxyServer
   def ssl_configured?
     false # File.exists?(@opts[:ssl][:cert]) and File.exists?(@opts[:ssl][:key])
   end
+
+  # def log(s,m)
+  #   return if @logger.blank?
+  #   @logger.
+  # end
 
   def whitelist
     @whitelist ||= File.readlines(File.join(APP_ROOT, 'whitelist.txt')).to_a.map{|v| v.match(/^(\r)?\n$/) ? nil : v.gsub(/(\r)?\n/m, '')}.compact rescue []
@@ -96,7 +102,7 @@ class WaybackProxyServer
           http_request = request.lines.first # first line
           Thread.current[:request_method] = http_request.gsub(/^([A-Z]+)(.*)$/i, '\1').downcase.to_sym rescue nil
 
-          uri = URI.parse(http_request.gsub(/^([A-Z]+)/, '').gsub(/(\sHTTP.*)/, '')) rescue nil
+          uri = Addressable::URI.parse(http_request.gsub(/^([A-Z]+)/, '').gsub(/(\sHTTP.*)/, '')) rescue nil
 
         rescue => err
           handle_error(__method__, err)
@@ -162,8 +168,11 @@ class WaybackProxyServer
   def get_request(uri)
     # Get Wayback URI if URI seems like it would be an item that is archived.
     begin
+      uri.scheme = 'http' unless uri.scheme
+      uri.host = 'web.archive.org' unless uri.host
+
       if !uri.host.match(/archive\.org$/i) && determine_page_type(uri) == :unknown
-        uri = get_wayback_uri(uri, :first_date)
+        uri = get_wayback_uri(uri, :first)
       end
     rescue => err
       handle_error(__method__, err)
@@ -279,11 +288,14 @@ class WaybackProxyServer
         content << "\r\n"
         content << resp.body
         content << "\r\n"
+        content.gsub!(/(\=(\s+)?(\"|\')?)(\\\/web\\\/\d+)/m, "\\1http:\\/\\/web.archive.org\\4")
+        content.gsub!(/(\=(\s+)?(\"|\')?)(\/web\/\d+)/m, "\\1http://web.archive.org\\4")
+        content.gsub!(/(\<\!\-\- BEGIN WAYBACK TOOLBAR INSERT \-\-\>)(.*)(\<\!\-\- END WAYBACK TOOLBAR INSERT \-\-\>)/im, '')
         content
 
       when Net::HTTPRedirection
         Thread.current[:redirect_count] += 1
-        new_uri = URI.parse(resp['location'])
+        new_uri = Addressable::URI.parse(resp['location'])
         fetch(new_uri)
 
       else
@@ -302,17 +314,15 @@ class WaybackProxyServer
 
 
   # Get the URI for the Wayback page, if available
-  def get_wayback_uri(uri,t=:first_date)
+  def get_wayback_uri(uri,t=:first)
     cache("wayback:#{uri}:#{t}") do
       begin
         if whitelisted?(uri)
           uri
         else
-          list = Wayback.list(uri)
-          if list[:dates].length > 0
-            d = list[t] if [:first_date,:last_date].include?(t)
-            d ||= list[:first_date] # default to first date
-            URI.parse(list[:dates][d][:uri])
+          resp = Wayback.available(uri,t)
+          if resp && resp[:url] && resp[:available]
+            Addressable::URI.parse(resp[:url])
           else
             uri
           end

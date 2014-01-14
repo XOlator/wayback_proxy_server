@@ -1,10 +1,10 @@
 # encoding: UTF-8
 
 # Wayback WiFi
-# A X&O Lab Creative Project
-# http://www.x-and-o.co/lab
+# A XOlator R&D Creative Project
+# http://www.xolator.com/
 #
-# (C) 2013 X&O. All Rights Reserved
+# (C) 2013-2014 XOlator. All Rights Reserved
 # License information: LICENSE.md
 
 
@@ -17,10 +17,10 @@ require "rubygems"
 require "bundler"
 Bundler.setup
 
-requires = ['openssl', 'optparse', 'socket', 'net/http', 'uri', 'wayback', 'redis', File.join(APP_ROOT, 'wayback_proxy_server.rb'), File.join(APP_ROOT, 'version.rb')]
+requires = ['openssl', 'optparse', 'socket', 'net/http', 'uri', 'wayback', 'redis', 'addressable/uri', File.join(APP_ROOT, 'wayback_proxy_server.rb'), File.join(APP_ROOT, 'version.rb')]
 requires.each{|r| require r}
 
-WAYBACK_PROXY_USER_AGENT = "Wayback/#{WaybackProxyServerVersion.to_s} <http://www.x-and-o.co/labs>"
+WAYBACK_PROXY_USER_AGENT = "Wayback/#{WaybackProxyServerVersion.to_s} <http://www.xolator.com/>"
 WAYBACK_PROXY_MAX_REDIRECTS = 5
 WAYBACK_PROXY_MAX_RETRIES = 5
 
@@ -35,6 +35,7 @@ OptionParser.new do |opts|
   opts.on("--debug", "Debug Mode") {|v| DEBUG = true}
   opts.on("-d", "--daemon", "Daemon Mode") {|v| options[:daemon] = true}
   opts.on("-s", "--ssl", "Allow SSL") {|v| options[:ssl] = {}}
+  opts.on("-l L", "--logger L", "Log requests?") {|v| options[:logger] = Logger.new(v)}
 end.parse!
 DEBUG ||= false
 
@@ -74,7 +75,7 @@ end
 # --- BEGIN ---
 
 result = Proc.new{|opts, cache|
-   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :ssl => opts[:ssl], :allow_ssl => true, :cache => $wayback_cache)
+   server = WaybackProxyServer.new(:host => opts[:host], :port => opts[:port], :ssl => opts[:ssl], :allow_ssl => true, :logger => opts[:logger], :cache => $wayback_cache)
    server.run
 }
 

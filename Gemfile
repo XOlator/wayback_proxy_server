@@ -7,5 +7,6 @@ source 'https://rubygems.org'
 
 
 
-gem 'wayback',            '0.1.0'
-gem 'redis',              '3.0.4'
+gem 'wayback',            '0.3.1'
+gem 'redis',              '3.0.6'
+gem 'addressable',        '2.3.5'
