@@ -281,7 +281,8 @@ class WaybackProxyServer
 
         # Get Headers
         resp.each_header do |h,v|
-          next if ['transfer-encoding', 'connection'].include?(h.downcase)
+          next if ['transfer-encoding','connection','link','server','content-length'].include?(h.downcase)
+          next if h.match(/^x\-/i) || h.match(/^memento/)
           content << h + ": " + v + "\r\n"
         end
 
